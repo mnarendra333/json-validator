@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>JSON Validator</title>
+    <style>
+        body {
+            display: flex;
+            font-family: 'Segoe UI', Arial, sans-serif;
+            height: 100vh;
+            margin: 0;
+            background: #f4f6fb;
+        }
+        #inputFrame, #treeFrame {
+            flex: 1;
+            padding: 2em;
+            border: none;
+            box-shadow: 0 0 16px 0 #e0e0e0;
+            background: #fff;
+            margin: 2em;
+            border-radius: 12px;
+            display: flex;
+            flex-direction: column;
+        }
+        #inputFrame {
+            max-width: 40vw;
+        }
+        #treeFrame {
+            max-width: 60vw;
+            overflow: auto;
+        }
+        h3 {
+            margin-top: 0;
+            color: #2d3a4b;
+        }
+        textarea {
+            width: 100%;
+            height: 60vh;
+            resize: vertical;
+            font-family: 'Fira Mono', 'Consolas', monospace;
+            font-size: 1em;
+            border: 1px solid #bfc9d1;
+            border-radius: 6px;
+            padding: 1em;
+            background: #f8fafc;
+            margin-bottom: 1em;
+            transition: border 0.2s;
+        }
+        textarea:focus {
+            border: 1.5px solid #4f8cff;
+            outline: none;
+        }
+        button {
+            background: #4f8cff;
+            color: #fff;
+            border: none;
+            border-radius: 6px;
+            padding: 0.7em 1.5em;
+            font-size: 1em;
+            cursor: pointer;
+            margin-bottom: 1em;
+            transition: background 0.2s;
+        }
+        button:hover {
+            background: #2563eb;
+        }
+        .error {
+            color: #e53e3e;
+            margin-top: 0.5em;
+            font-weight: bold;
+        }
+        /* JSON Tree Styles */
+        .json-key {
+            color: #2563eb;
+            font-weight: bold;
+        }
+        .json-string {
+            color: #10b981;
+        }
+        .json-number {
+            color: #f59e42;
+        }
+        .json-boolean {
+            color: #f43f5e;
+        }
+        .json-null {
+            color: #64748b;
+            font-style: italic;
+        }
+        .json-collapser {
+            cursor: pointer;
+            color: #4f8cff;
+            font-weight: bold;
+            margin-right: 4px;
+            user-select: none;
+        }
+        .json-collapsed {
+            display: none;
+        }
+        .json-tree {
+            font-family: 'Fira Mono', 'Consolas', monospace;
+            font-size: 1em;
+            background: #f8fafc;
+            border-radius: 8px;
+            padding: 1em;
+            white-space: pre;
+            overflow-x: auto;
+        }
+        .json-object, .json-array {
+            background: #e9f1fb;
+            border: 1px solid #c3dafe;
+            border-radius: 8px;
+            margin: 0.3em 0;
+            padding: 0.5em 0.7em 0.5em 1.2em;
+            position: relative;
+        }
+        .json-object {
+            /* For objects */
+        }
+        .json-array {
+            /* For arrays */
+        }
+    </style>
+</head>
+<body>
+    <div id="inputFrame">
+        <h3>Enter JSON</h3>
+        <textarea id="jsonInput"></textarea>
+        <button onclick="validateJson()">Validate</button>
+        <div id="errorMsg" class="error"></div>
+    </div>
+    <div id="treeFrame">
+        <h3>JSON Tree</h3>
+        <div id="jsonTree" class="json-tree"></div>
+    </div>
+
+    <script>
+        function validateJson() {
+            const input = document.getElementById('jsonInput').value;
+            fetch('/api/json/validate', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: input
+            })
+            .then(res => {
+                if (!res.ok) throw new Error("Invalid JSON");
+                return res.json();
+            })
+            .then(data => {
+                document.getElementById('errorMsg').innerText = '';
+                renderJsonTree(data, document.getElementById('jsonTree'));
+            })
+            .catch(err => {
+                document.getElementById('jsonTree').innerHTML = '';
+                document.getElementById('errorMsg').innerText = err.message;
+            });
+        }
+
+        // JSON Tree Rendering with Collapsible Nodes and aligned braces
+        function createJsonNode(value, key = null, isLast = true) {
+            const type = typeof value;
+            let node = document.createElement('div');
+            node.style.marginLeft = key !== null ? '1.2em' : '0';
+
+            if (Array.isArray(value)) {
+                node.classList.add('json-array');
+                if (key !== null) {
+                    const keySpan = document.createElement('span');
+                    keySpan.className = 'json-key';
+                    keySpan.textContent = `"${key}": `;
+                    node.appendChild(keySpan);
+                }
+                const collapser = document.createElement('span');
+                collapser.className = 'json-collapser';
+                collapser.textContent = '-';
+                node.appendChild(collapser);
+
+                node.appendChild(document.createTextNode('\n[\n'));
+                const children = document.createElement('div');
+                children.className = 'json-children';
+                children.style.marginLeft = '1.5em';
+                value.forEach((item, idx) => {
+                    children.appendChild(createJsonNode(item, null, idx === value.length - 1));
+                });
+                node.appendChild(children);
+                node.appendChild(document.createTextNode(']'));
+                if (!isLast) node.appendChild(document.createTextNode(','));
+
+                collapser.onclick = function() {
+                    children.classList.toggle('json-collapsed');
+                    collapser.textContent = children.classList.contains('json-collapsed') ? '+' : '-';
+                };
+            } else if (type === 'object' && value !== null) {
+                node.classList.add('json-object');
+                if (key !== null) {
+                    const keySpan = document.createElement('span');
+                    keySpan.className = 'json-key';
+                    keySpan.textContent = `"${key}": `;
+                    node.appendChild(keySpan);
+                }
+                const collapser = document.createElement('span');
+                collapser.className = 'json-collapser';
+                collapser.textContent = '-';
+                node.appendChild(collapser);
+
+                node.appendChild(document.createTextNode('\n{\n'));
+                const children = document.createElement('div');
+                children.className = 'json-children';
+                children.style.marginLeft = '1.5em';
+                const keys = Object.keys(value);
+                keys.forEach((k, idx) => {
+                    children.appendChild(createJsonNode(value[k], k, idx === keys.length - 1));
+                });
+                node.appendChild(children);
+                node.appendChild(document.createTextNode('}'));
+                if (!isLast) node.appendChild(document.createTextNode(','));
+
+                collapser.onclick = function() {
+                    children.classList.toggle('json-collapsed');
+                    collapser.textContent = children.classList.contains('json-collapsed') ? '+' : '-';
+                };
+            } else {
+                if (key !== null) {
+                    const keySpan = document.createElement('span');
+                    keySpan.className = 'json-key';
+                    keySpan.textContent = `"${key}": `;
+                    node.appendChild(keySpan);
+                }
+                let valSpan = document.createElement('span');
+                if (type === 'string') {
+                    valSpan.className = 'json-string';
+                    valSpan.textContent = `"${value}"`;
+                } else if (type === 'number') {
+                    valSpan.className = 'json-number';
+                    valSpan.textContent = value;
+                } else if (type === 'boolean') {
+                    valSpan.className = 'json-boolean';
+                    valSpan.textContent = value;
+                } else if (value === null) {
+                    valSpan.className = 'json-null';
+                    valSpan.textContent = 'null';
+                }
+                node.appendChild(valSpan);
+                if (!isLast) node.appendChild(document.createTextNode(','));
+            }
+            return node;
+        }
+
+        function renderJsonTree(json, container) {
+            container.innerHTML = '';
+            container.appendChild(createJsonNode(json, null, true));
+        }
+    </script>
+</body>
+</html>
